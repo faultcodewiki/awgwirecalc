@@ -1,0 +1,46 @@
+name: Auto Expand AWG Scenarios
+
+on:
+  schedule:
+    # 매주 수요일(3), 일요일(0) 한국시간 밤 23:20 (UTC 14:20) 자동 실행
+    - cron: '20 14 * * 3,0'
+  workflow_dispatch:
+    inputs:
+      force_generate:
+        description: '애드센스 승인 전이라도 지금 즉시 7개 강제 생성하기 (평소엔 false 유지)'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+
+jobs:
+  expand-guides:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check AdSense & Generate Scenarios (Cap at 100)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FORCE_GENERATE: ${{ github.event.inputs.force_generate || 'false' }}
+        run: python generate_scenarios.py
+
+      - name: Rebuild & Commit Only When Updated
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            python build_site.py
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add .
+            git commit -m "Auto-update AWG scenarios (NEC verified)"
+            git push
+          else
+            echo "변경 사항 없음 (애드센스 심사 대기 중이거나 100개 달성 완료) - 커밋 생략"
+          fi
